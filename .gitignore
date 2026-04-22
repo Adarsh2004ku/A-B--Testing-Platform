@@ -7,3 +7,4 @@ logs/*.log
 dist/
 .DS_Store
 EOF
+logs/
