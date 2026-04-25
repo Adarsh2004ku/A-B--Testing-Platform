@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>A/B Testing Platform</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #111; padding: 2rem; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+  .badge { font-size: 12px; padding: 4px 12px; border-radius: 8px; }
+  .badge.running { background: #d1fae5; color: #065f46; }
+  .badge.warning { background: #fef3c7; color: #92400e; }
+  .badge.success { background: #d1fae5; color: #065f46; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .metric { background: #fff; border-radius: 8px; padding: 1rem; }
+  .metric label { font-size: 13px; color: #666; display: block; margin-bottom: 6px; }
+  .metric .value { font-size: 22px; font-weight: 500; }
+  .metric .value.positive { color: #059669; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 13px; color: #666; margin-bottom: 12px; }
+  .chart-wrap { position: relative; width: 100%; height: 260px; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: #666; margin-bottom: 8px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+  .stat .val { font-size: 18px; font-weight: 500; }
+  .decision { background: #f9fafb; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  #experimentSelect { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; margin-right: 8px; }
+  #loadBtn { padding: 8px 16px; background: #111; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  #loadBtn:hover { background: #333; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <p style="font-size:13px;color:#666;margin-bottom:4px;">A/B Testing Platform</p>
+      <h1 style="font-size:20px;font-weight:500;" id="expName">Loading...</h1>
+    </div>
+    <div>
+      <input id="experimentSelect" type="text" value="checkout_button_color" placeholder="experiment name" />
+      <button id="loadBtn" onclick="loadResults()">Load</button>
+    </div>
+  </div>
+
+  <div class="metrics" id="metrics"></div>
+
+  <div class="card">
+    <p class="card-title">variant distribution</p>
+    <div class="legend" id="legend1"></div>
+    <div class="chart-wrap"><canvas id="barChart" role="img" aria-label="variant assignments and conversions"></canvas></div>
+  </div>
+
+  <div class="card">
+    <p class="card-title">conversion rate comparison</p>
+    <div class="legend" id="legend2"></div>
+    <div class="chart-wrap" style="height:200px"><canvas id="rateChart" role="img" aria-label="conversion rates per variant"></canvas></div>
+  </div>
+
+  <div class="card" id="sigCard"></div>
+  <div class="card" id="srmCard"></div>
+  <div class="decision" id="decisionCard"></div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000/api/v1';
+let barChart, rateChart;
+
+async function loadResults() {
+  const name = document.getElementById('experimentSelect').value.trim();
+  document.getElementById('expName').textContent = name;
+  try {
+    const res = await fetch(API + '/results/' + name + '?log_to_mlflow=true');
+    const data = await res.json();
+    render(data);
+  } catch(e) {
+    document.getElementById('expName').textContent = 'Error — is uvicorn running?';
+  }
+}
+
+function render(data) {
+  document.getElementById('expName').textContent = data.experiment;
+  const control   = data.variants.find(v => v.is_control);
+  const treatment = data.variants.find(v => !v.is_control);
+  const sig = treatment?.significance || {};
+  const totalUsers = data.variants.reduce((s,v) => s + v.assignments, 0);
+  const totalConv  = data.variants.reduce((s,v) => s + v.conversions, 0);
+
+  document.getElementById('metrics').innerHTML =
+    '<div class="metric"><label>total users</label><div class="value">' + totalUsers.toLocaleString() + '</div></div>' +
+    '<div class="metric"><label>total conversions</label><div class="value">' + totalConv + '</div></div>' +
+    '<div class="metric"><label>relative lift</label><div class="value positive">' + (sig.relative_lift ? '+' + sig.relative_lift + '%' : 'N/A') + '</div></div>' +
+    '<div class="metric"><label>p-value</label><div class="value">' + (sig.p_value ?? 'N/A') + '</div></div>';
+
+  document.getElementById('legend1').innerHTML = data.variants.map((v,i) =>
+    '<span><span class="legend-dot" style="background:' + (i===0?'#378ADD':'#1D9E75') + '"></span>' + v.variant + ' ' + v.assignments.toLocaleString() + '</span>'
+  ).join('');
+
+  document.getElementById('legend2').innerHTML = data.variants.map((v,i) =>
+    '<span><span class="legend-dot" style="background:' + (i===0?'#378ADD':'#1D9E75') + '"></span>' + v.variant + ' ' + (v.conversion_rate*100).toFixed(2) + '%</span>'
+  ).join('');
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: ['assigned','conversions'],
+      datasets: data.variants.map((v,i) => ({
+        label: v.variant,
+        data: [v.assignments, v.conversions],
+        backgroundColor: i===0 ? '#378ADD' : '#1D9E75'
+      }))
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+
+  if (rateChart) rateChart.destroy();
+  rateChart = new Chart(document.getElementById('rateChart'), {
+    type: 'bar',
+    data: {
+      labels: data.variants.map(v => v.variant),
+      datasets: [{ data: data.variants.map(v => +(v.conversion_rate*100).toFixed(2)), backgroundColor: ['#378ADD','#1D9E75'] }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => v.toFixed(2)+'%' } } }
+    }
+  });
+
+  const isSignificant = sig.is_significant;
+  document.getElementById('sigCard').innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+    '<p class="card-title" style="margin:0">statistical significance</p>' +
+    '<span class="badge ' + (isSignificant?'success':'warning') + '">' + (isSignificant?'significant':'not significant yet') + '</span></div>' +
+    '<div class="stat-grid">' +
+    '<div class="stat"><label>z-score</label><div class="val">' + (sig.z_score??'N/A') + '</div></div>' +
+    '<div class="stat"><label>p-value</label><div class="val">' + (sig.p_value??'N/A') + '</div></div>' +
+    '<div class="stat"><label>95% CI lower</label><div class="val">' + (sig.ci_lower??'N/A') + '</div></div>' +
+    '<div class="stat"><label>95% CI upper</label><div class="val">' + (sig.ci_upper??'N/A') + '</div></div></div>';
+
+  const srm = data.srm_check;
+  document.getElementById('srmCard').innerHTML =
+    '<p class="card-title">SRM check</p>' +
+    '<div style="display:flex;align-items:center;gap:8px;">' +
+    '<span class="badge ' + (srm.has_srm?'warning':'success') + '">' + (srm.has_srm?'mismatch detected':'no mismatch') + '</span>' +
+    '<span style="font-size:13px;color:#666;">chi2 = ' + srm.chi2_statistic + ' · p = ' + srm.p_value + '</span></div>';
+
+  document.getElementById('decisionCard').innerHTML =
+    '<p style="font-size:13px;color:#666;margin-bottom:8px;">MLflow decision</p>' +
+    '<p style="font-size:15px;font-weight:500;">' + (isSignificant?'ship treatment to 100% of users':'keep running — no significant winner yet') + '</p>' +
+    '<p style="font-size:13px;color:#666;margin-top:4px;">treatment shows ' + (sig.relative_lift?'+'+sig.relative_lift+'%':'N/A') + ' lift · needs p &lt; 0.05 to ship</p>';
+}
+
+loadResults();
+</script>
+</body>
+</html>

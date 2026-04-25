@@ -4,7 +4,6 @@ from src.models.experiment import Experiment
 from src.models.variant import Variant
 from src.models.assignment import Assignment
 from src.models.user import User
-from src.core.cache import get_cached_assignment, set_cached_assignment
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,19 +44,13 @@ def check_segment(user: User, target_segments: dict) -> bool:
 
 def assign_user(user_external_id: str, experiment_name: str, db: Session) -> dict:
 
-    # 1. Check Redis cache first
-    cached = get_cached_assignment(user_external_id, experiment_name)
-    if cached:
-        cached["from_cache"] = True
-        return cached
-
-    # 2. Load user
+    # Load user
     user = db.query(User).filter(User.external_id == user_external_id).first()
     if not user:
         logger.warning("User not found", extra={"user_id": user_external_id})
         return {"assigned": False, "reason": "user_not_found"}
 
-    # 3. Load experiment
+    # Load experiment
     experiment = db.query(Experiment).filter(
         Experiment.name == experiment_name,
         Experiment.status == "running"
@@ -66,29 +59,30 @@ def assign_user(user_external_id: str, experiment_name: str, db: Session) -> dic
         logger.warning("Experiment not found or not running")
         return {"assigned": False, "reason": "experiment_not_found"}
 
-    # 4. Check existing DB assignment
+    # Return existing assignment
     existing = db.query(Assignment).filter(
         Assignment.user_id == user.id,
         Assignment.experiment_id == experiment.id
     ).first()
     if existing:
         variant = db.query(Variant).filter(Variant.id == existing.variant_id).first()
-        result = {
+        logger.info("Returning existing assignment", extra={
+            "user_id": user_external_id,
+            "variant": variant.name
+        })
+        return {
             "assigned": True,
             "user_id": user_external_id,
             "experiment": experiment_name,
             "variant": variant.name,
-            "config": variant.config,
-            "from_cache": False
+            "config": variant.config
         }
-        set_cached_assignment(user_external_id, experiment_name, result)
-        return result
 
-    # 5. Check segmentation
+    # Check segmentation
     if not check_segment(user, experiment.target_segments):
         return {"assigned": False, "reason": "segment_mismatch"}
 
-    # 6. Compute bucket and select variant
+    # Compute bucket and select variant
     bucket = get_bucket(user_external_id, str(experiment.id))
     variants = db.query(Variant).filter(
         Variant.experiment_id == experiment.id
@@ -97,7 +91,7 @@ def assign_user(user_external_id: str, experiment_name: str, db: Session) -> dic
     if not variant:
         return {"assigned": False, "reason": "no_variant"}
 
-    # 7. Save to DB
+    # Save to DB
     assignment = Assignment(
         user_id=user.id,
         experiment_id=experiment.id,
@@ -106,19 +100,6 @@ def assign_user(user_external_id: str, experiment_name: str, db: Session) -> dic
     db.add(assignment)
     db.commit()
 
-    result = {
-        "assigned": True,
-        "user_id": user_external_id,
-        "experiment": experiment_name,
-        "variant": variant.name,
-        "config": variant.config,
-        "bucket": bucket,
-        "from_cache": False
-    }
-
-    # 8. Cache the result
-    set_cached_assignment(user_external_id, experiment_name, result)
-
     logger.info("User assigned", extra={
         "user_id": user_external_id,
         "experiment_id": str(experiment.id),
@@ -126,4 +107,11 @@ def assign_user(user_external_id: str, experiment_name: str, db: Session) -> dic
         "bucket": bucket
     })
 
-    return result
+    return {
+        "assigned": True,
+        "user_id": user_external_id,
+        "experiment": experiment_name,
+        "variant": variant.name,
+        "config": variant.config,
+        "bucket": bucket
+    }

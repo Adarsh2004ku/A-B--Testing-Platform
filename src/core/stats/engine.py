@@ -50,7 +50,7 @@ def z_test_proportions(
         "p_value":             round(p_value, 4),
         "ci_lower":            round(ci_lower, 4),
         "ci_upper":            round(ci_upper, 4),
-        "is_significant":      p_value < 0.05,
+        "is_significant":      bool(p_value < 0.05),  # Convert numpy bool to Python bool
         "confidence_level":    "95%"
     }
 
@@ -94,7 +94,7 @@ def srm_check(
         "observed_counts":  observed_counts,
         "chi2_statistic":   round(chi2, 4),
         "p_value":          round(p_value, 4),
-        "has_srm":          has_srm,
+        "has_srm":          bool(has_srm),  # Convert numpy bool to Python bool
         "verdict":          " SRM DETECTED - results invalid" if has_srm else " No SRM - assignment looks healthy"
     }
 
