@@ -6,14 +6,12 @@ from alembic import context
 from dotenv import load_dotenv
 
 load_dotenv()
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from src.utils.database import Base
-from src.models import *  # imports all models so Alembic sees them
+from src.models.base import Base
+from src.models import *
 
 config = context.config
-
 config.set_main_option(
     "sqlalchemy.url",
     f"postgresql://"

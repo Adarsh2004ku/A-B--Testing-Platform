@@ -1,8 +1,9 @@
 import os
-from sqlalchemy import create_engine,text
-from sqlalchemy.orm import sessionmaker,DeclarativeBase
-from src.utils.logger import get_logger
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from src.utils.logger import get_logger
+from src.models.base import Base
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -16,25 +17,10 @@ DATABASE_URL = (
     f"{os.getenv('POSTGRES_DB')}"
 )
 
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=10,      # 10 persistent connections kept open
-    max_overflow=20,   # 20 extra allowed under load
-    echo=False         # set True to print raw SQL queries
-)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-class Base(DeclarativeBase):
-    pass
+engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20, echo=False)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
-    """ FastApi dependency - each request gets its own session"""
     db = SessionLocal()
     try:
         yield db
@@ -42,7 +28,7 @@ def get_db():
         db.close()
 
 def check_db_connection():
-    try :
+    try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection successful")
