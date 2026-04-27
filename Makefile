@@ -3,10 +3,7 @@
 run:
 	docker-compose up -d
 	@echo "✅ PostgreSQL running on port 5432"
-	@echo "✅ Redis running on port 6379"
 
-stop:
-	docker-compose down
 
 build:
 	docker-compose up -d --build
@@ -38,6 +35,3 @@ clean:
 
 psql:
 	docker exec -it ab_postgres psql -U abtest_user -d abtest_db
-
-redis-cli:
-	docker exec -it ab_redis redis-cli
