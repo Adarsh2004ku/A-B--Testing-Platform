@@ -354,31 +354,6 @@ Open `src/dashboard/index.html` in the browser while the API server is running. 
 
 ---
 
-## What Recruiters Look For
-
-### Data Analyst / Business Analyst roles — Deloitte, EY, PwC, KPMG, Accenture
-
-Big 4 and consulting firms hire freshers to work with client data, build dashboards, support project teams, and present findings. In campus placements, they look for three things: can you think analytically, can you communicate findings clearly, and do you have practical exposure beyond coursework.
-
-**How this project speaks to that:**
-
-The platform does not just compute p-values — it maps them to decisions. A p-value of 0.16 becomes "keep running." A p-value of 0.02 becomes "ship to 100% of users." Translating numbers into business recommendations is the exact skill these firms assess in case study rounds.
-
-SRM detection shows awareness that data quality issues can corrupt results before analysis even begins. Catching bad data before it misleads a decision is a consulting mindset — most fresher projects only show the happy path.
-
-The real dataset produced an inconclusive result (p=0.49, no winner). Knowing that "no significant winner" is a valid and common outcome demonstrates statistical maturity over someone who only works with clean toy datasets where the treatment always wins.
-
-The four statistical models — Z-test, chi-square, power analysis, Bonferroni — each have a named business justification. Being able to explain what each one is for, not just how to run it, is what separates you in GD/PI rounds.
-
-**What to say in the interview:** "I built an experimentation platform where the statistics engine maps every result to a business decision — ship, hold, or keep running. The system also detects data quality issues before they corrupt results. I ran it on a real 10,000-user dataset and the result was correctly inconclusive."
-
----
-
-### Data Science / Analytics Engineering roles — Accenture Strategy, Deloitte Analytics, KPMG Data
-
-These roles care more about the technical depth. Recruiters shortlist based on projects that show end-to-end ownership, not just model training in a notebook.
-
-**How this project speaks to that:**
 
 Data flows from user action (assignment) through event logging, statistical analysis, MLflow tracking, and dashboard visualization. No step is outsourced to a library that hides the logic. The Z-test, SRM check, power analysis, and Bonferroni correction are all written from the formula up using SciPy primitives.
 
@@ -388,45 +363,6 @@ The six-table PostgreSQL schema with foreign keys, uniqueness constraints, and A
 
 Being able to explain null hypothesis, Type I error, Type II error, statistical power, and confidence intervals — all of which appear directly in this project's output — prepares you for the technical screening rounds these firms run.
 
-**What to say in the interview:** "I implemented four statistical models from scratch — Z-test for significance, chi-square for assignment quality, power analysis for experiment planning, and Bonferroni correction for multiple comparisons. I ran the platform on a real dataset and tracked every result in MLflow."
-
----
-
-### Technology Consulting / Software Development roles — Accenture, Infosys, TCS, Wipro campus
-
-These roles look for practical engineering skills — the ability to build something that works end to end, not just pass a coding round.
-
-**How this project speaks to that:**
-
-Three REST API endpoints built with FastAPI, proper HTTP status codes, Pydantic validation, and auto-generated OpenAPI documentation accessible at `/docs`. Interviewers can open the browser and test it live.
-
-One `make run` command starts the entire stack via Docker. No setup instructions needed. This is what "production mindset" looks like in practice.
-
-The codebase follows a clean layered architecture — stats logic in `core/stats/`, database models in `models/`, API routes in `api/routes/`. Not a single 500-line script. This is what they mean by "modular, maintainable code."
-
-Structured JSON logging with context fields (user_id, experiment_id, variant) is what real monitoring systems consume. It is the difference between a learning project and a system someone else could operate.
-
-**What to say in the interview:** "The platform exposes three REST endpoints, runs on Docker, uses Alembic for database migrations, and logs every operation as structured JSON. Anyone can clone it and run it in under five minutes."
-
----
-
-## Key Engineering Decisions
-
-**Consistent hashing for assignment** — `hash(user_id + experiment_id) % 100` gives a deterministic bucket. Same user always gets the same variant without a database lookup. Same algorithm used at Uber and Airbnb.
-
-**Unique constraint at DB level** — `UNIQUE(user_id, experiment_id)` prevents double-assignment under concurrent load. Application-level checks alone are insufficient.
-
-**Two-tailed Z-test** — correct for experiments where either direction of change matters. Treatment could be worse, not just better.
-
-**SRM threshold at p < 0.01** — stricter than significance threshold (p < 0.05) because a failed SRM check invalidates the entire experiment, not just one metric.
-
-**JSON structured logging** — every log line is valid JSON with `timestamp`, `level`, `module`, `function`, and context fields. Parseable by Grafana/Loki without custom parsing rules.
-
----
-
-## One-liner for every interview
-
-> "I built an end-to-end A/B testing platform that handles statistically correct user assignment using consistent hashing, validates experiment integrity with SRM detection, runs significance testing with Z-tests and Bonferroni correction, and logs every result to MLflow with an automatic ship/no-ship decision."
 
 ---
 
