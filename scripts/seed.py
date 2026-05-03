@@ -22,42 +22,46 @@ def seed():
 
         # Create users
         users = [
-            User(external_id="user_001", country="IN", device_type="mobile", user_type="free"),
+            User(external_id="user_001", country="US", device_type="mobile", user_type="free"),
             User(external_id="user_002", country="US", device_type="desktop", user_type="premium"),
-            User(external_id="user_003", country="IN", device_type="desktop", user_type="free"),
-            User(external_id="user_004", country="UK", device_type="mobile", user_type="enterprise"),
-            User(external_id="user_005", country="US", device_type="mobile", user_type="free"),
+            User(external_id="user_003", country="UK", device_type="mobile", user_type="free"),
         ]
         db.add_all(users)
-        db.flush()
-        logger.info("Users seeded", extra={"count": len(users)})
+        db.commit()
+        print(f"✅ Created {len(users)} users")
 
         # Create experiment
         experiment = Experiment(
             name="checkout_button_color",
-            description="Test green vs red checkout button",
+            description="Test button colors",
             status="running",
-            layer="ui",
-            target_segments={"country": ["IN", "US"]}
+            layer="checkout"
         )
         db.add(experiment)
-        db.flush()
-        logger.info("Experiment seeded", extra={"experiment_id": str(experiment.id)})
+        db.commit()
 
         # Create variants
-        variants = [
-            Variant(experiment_id=experiment.id, name="control", is_control=True, traffic_weight=0.5, config={"button_color": "red"}),
-            Variant(experiment_id=experiment.id, name="treatment", is_control=False, traffic_weight=0.5, config={"button_color": "green"}),
-        ]
-        db.add_all(variants)
+        control = Variant(
+            experiment_id=experiment.id,
+            name="control",
+            is_control=True,
+            traffic_weight=50.0
+        )
+        treatment = Variant(
+            experiment_id=experiment.id,
+            name="treatment",
+            is_control=False,
+            traffic_weight=50.0
+        )
+        db.add(control)
+        db.add(treatment)
         db.commit()
-        logger.info("Variants seeded")
-        print("✅ Seed complete")
+        
+        print("✅ Created experiment and variants")
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Seed failed: {e}")
-        print(f"❌ Seed failed: {e}")
+        print(f"❌ Error: {e}")
     finally:
         db.close()
 

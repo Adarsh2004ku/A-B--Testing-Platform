@@ -1,197 +1,68 @@
 # A/B Testing Platform
 
-A production-grade experimentation platform built with FastAPI, PostgreSQL, SQLAlchemy, and MLflow. Implements the same core architecture used by Netflix, Uber, and Airbnb for data-driven product decisions — consistent hashing for fair user assignment, statistical significance testing, SRM detection, and a live results dashboard.
+A simplified A/B testing platform built with FastAPI and PostgreSQL. Provides core experimentation functionality including user assignment, event tracking, and statistical analysis.
 
-> **For recruiters:** This project demonstrates applied statistics, backend engineering, database design, and MLOps — all in one end-to-end system built from scratch. Jump to [What Recruiters Look For](#what-recruiters-look-for) for a quick summary.
+## Features
 
----
+- **User Assignment**: Consistent hashing for fair experiment assignment
+- **Event Tracking**: Log conversion and other events
+- **Statistical Analysis**: Z-test significance testing and SRM detection
+- **REST API**: Simple endpoints for assignment, events, and results
+- **Basic Dashboard**: Web interface for viewing results
 
-## Problem Statement
+## Quick Start
 
-Companies make product decisions based on guesses. Testing changes properly — fair user splitting, statistically correct analysis, experiment isolation — is hard to do right. Enterprise tools like Optimizely and LaunchDarkly cost thousands of dollars per month. This platform solves the same core problems from scratch using open-source tools.
+1. **Start PostgreSQL**:
+   ```bash
+   make run
+   ```
 
-**Real-world use cases this platform supports:**
+2. **Run migrations**:
+   ```bash
+   make migrate
+   ```
 
-- An e-commerce company tests whether a green checkout button converts better than a red one
-- A fintech startup safely rolls out a new payment flow to 10% of users before full release
-- A SaaS product compares two onboarding flows across mobile vs desktop users separately
-- A data science team validates whether a new recommendation model improves engagement on live traffic
+3. **Seed sample data**:
+   ```bash
+   make seed
+   ```
 
----
+4. **Start the API**:
+   ```bash
+   uvicorn src.api.main:app --reload
+   ```
 
-## What It Does
+5. **View results**:
+   - API: http://localhost:8000/docs
+   - Dashboard: Open `src/dashboard/index.html` in browser
 
-- **Fair user assignment** — consistent hashing ensures the same user always gets the same variant, with no database lookup required
-- **Segmentation** — filter experiment eligibility by country, device type, or user type
-- **Statistical analysis** — four statistical models implemented from scratch (details below)
-- **Experiment tracking** — every assignment and conversion event persisted to PostgreSQL
-- **MLflow integration** — all experiment results automatically logged with metrics, params, and ship/no-ship decisions
-- **Live dashboard** — visual charts showing variant distribution, conversion rates, and significance badges
-- **REST API** — three production-ready endpoints powering the entire platform
+## API Endpoints
 
----
-
-## Tech Stack
-
-| Layer | Technology | Why |
-|---|---|---|
-| API | FastAPI + Uvicorn | Async, auto-generates OpenAPI docs |
-| Database | PostgreSQL 15 | ACID compliance, UUID primary keys |
-| ORM + Migrations | SQLAlchemy 2.0 + Alembic | Type-safe queries, schema versioning |
-| Statistics | SciPy + NumPy | Industry-standard scientific computing |
-| Experiment Tracking | MLflow | Standard MLOps tool for experiment logging |
-| Frontend Dashboard | Vanilla HTML + Chart.js | Zero-dependency, browser-native |
-| Containerization | Docker + Docker Compose | Reproducible environments |
-| Logging | Structured JSON | Parseable by Grafana/Loki/Splunk |
-
----
-
-## Statistical Models
-
-This is the core of the platform. Four statistical methods are implemented in `src/core/stats/engine.py`, each solving a distinct problem in experimentation.
-
-### 1. Two-Sample Z-Test for Proportions
-
-**What it answers:** Is the difference in conversion rates between control and treatment statistically real, or could it be random chance?
-
-**Why Z-test (not T-test):** Conversion rate data is binary (converted: yes/no), making it a proportion problem. Z-test is the correct choice for large samples with binary outcomes. T-test is for continuous data like revenue or session duration.
-
-**Formula used:**
-
-```
-z = (p_treatment - p_control) / sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
-
-p_pooled = (conversions_control + conversions_treatment) / (n_control + n_treatment)
-```
-
-**Output:** p-value, z-score, relative lift %, absolute lift, 95% confidence interval, significance flag.
-
-**Significance threshold:** p < 0.05 (two-tailed). This means there is less than a 5% probability that the observed difference occurred by chance.
-
-**Real result on 10,000-user dataset:**
-```
-Control   conversion rate:  1.87%   (62 / 3,324 users)
-Treatment conversion rate:  2.36%   (80 / 3,391 users)
-Relative lift:              +26.48%
-Z-score:                    1.4067
-P-value:                    0.1595
-Decision:                   Not significant — keep running
-```
-The treatment showed a 26% lift but p=0.16 means there is a 16% chance this difference is noise. The platform correctly held back the ship decision.
-
----
-
-### 2. Chi-Square Goodness of Fit — SRM Detection
-
-**What it answers:** Were users assigned in the expected ratio? If not, the entire experiment is invalid regardless of how good the results look.
-
-**Why this matters:** If you expect 50% control / 50% treatment but get 60% / 40%, your assignment engine has a bug. Even correct-looking results cannot be trusted — some users may have been preferentially routed to one variant based on an unintended factor (browser type, time of day, geography). This is called a Sample Ratio Mismatch (SRM).
-
-**Model used:** Chi-square goodness of fit test comparing observed counts against expected counts derived from traffic weights.
-
-```
-chi2 = sum((observed - expected)^2 / expected)
-```
-
-**SRM threshold:** p < 0.01 (stricter than significance threshold because SRM invalidates the whole experiment, not just one metric).
-
-**Example:**
-```
-Expected:  [500, 500]   (50/50 split)
-Observed:  [502, 498]   → chi2=0.008, p=0.93  → ✅ No SRM, healthy
-Observed:  [700, 300]   → chi2=80.0,  p≈0.00  → ⚠️  SRM DETECTED — discard results
-```
-
----
-
-### 3. Statistical Power Analysis
-
-**What it answers:** How many users do you need before running the experiment?
-
-**Why it matters:** Starting an experiment without calculating sample size is one of the most common mistakes in A/B testing. Stop too early and you make decisions on noise (underpowered). Run too long and you waste resources on an experiment that has already answered the question.
-
-**Inputs:** baseline conversion rate, minimum detectable effect (MDE), alpha (0.05), power (0.80).
-
-**Formula:**
-
-```
-n = ((z_alpha * sqrt(2 * p_avg * (1 - p_avg)) + z_beta * sqrt(p1*(1-p1) + p2*(1-p2)))^2) / (p2 - p1)^2
-```
-
-**Example output:**
-```
-Baseline rate:                10%
-Minimum detectable effect:    2%   (want to detect improvement to 12%)
-Required per variant:         3,841 users
-Total required:               7,682 users
-```
-
----
-
-### 4. Bonferroni Correction — Multiple Testing Adjustment
-
-**What it answers:** When testing multiple variants simultaneously, how do you prevent false positives from inflating?
-
-**Why it matters:** If you run 20 statistical tests at alpha=0.05, you expect roughly 1 false positive by definition — even when nothing is actually different. This is the multiple comparisons problem. The Bonferroni correction adjusts the significance threshold downward proportionally.
-
-**Correction:** `alpha_corrected = 0.05 / number_of_comparisons`
-
-**Example with 3 variants:**
-```
-Original alpha:   0.05
-Corrected alpha:  0.0167   (0.05 / 3)
-
-Variant A: p=0.030 → NOT significant (0.030 > 0.0167)
-Variant B: p=0.080 → NOT significant
-Variant C: p=0.012 → SIGNIFICANT     (0.012 < 0.0167) ✅
-```
-
----
+- `POST /api/v1/assign` - Assign user to experiment variant
+- `POST /api/v1/events` - Log user events
+- `GET /api/v1/results/{experiment_name}` - Get experiment results
 
 ## Project Structure
 
 ```
-AB_Testing/
-├── src/
-│   ├── api/
-│   │   ├── main.py                  # FastAPI app, CORS middleware, startup checks
-│   │   └── routes/
-│   │       ├── assign.py            # POST /api/v1/assign
-│   │       ├── events.py            # POST /api/v1/events
-│   │       └── results.py          # GET  /api/v1/results/{experiment}
-│   ├── core/
-│   │   ├── assignment.py           # Consistent hashing, segmentation logic
-│   │   ├── mlflow_tracker.py       # MLflow run logging
-│   │   └── stats/
-│   │       └── engine.py           # Z-test, SRM, power analysis, Bonferroni
-│   ├── models/                     # SQLAlchemy ORM models
-│   │   ├── base.py
-│   │   ├── user.py
-│   │   ├── experiment.py
-│   │   ├── variant.py
-│   │   ├── assignment.py
-│   │   ├── event.py
-│   │   └── feature_flag.py
-│   ├── utils/
-│   │   ├── database.py             # Engine, session factory, health check
-│   │   └── logger.py              # Structured JSON logger
-│   └── dashboard/
-│       └── index.html              # Live results dashboard
-├── scripts/
-│   ├── seed.py                     # Seed base experiment + variants
-│   ├── generate_data.py            # Simulate 1000 users + conversions
-│   └── load_csv_data.py            # Load external A/B test CSV into DB
-├── alembic/                        # Versioned DB migrations
-├── logs/                           # app.log in JSON format
-├── data/                           # CSV datasets
-├── docker-compose.yml
-├── Makefile
-├── requirements.txt
-└── .env
+src/
+├── api/
+│   ├── main.py          # FastAPI app
+│   └── routes/          # API endpoints
+├── core/
+│   ├── assignment.py    # User assignment logic
+│   └── stats/           # Statistical analysis
+├── models/              # SQLAlchemy models
+└── utils/               # Database and logging utilities
+
+scripts/
+├── seed.py              # Sample data setup
+└── generate_data.py     # Test data generation
 ```
 
----
+## Dependencies
 
+<<<<<<< HEAD
 ## Quick Start
 
 ### Prerequisites
@@ -407,3 +278,10 @@ mlflow==2.13.0
 pytest==8.2.0
 httpx==0.27.0
 ```
+=======
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- SciPy/NumPy
+- Docker
+>>>>>>> 5325f85 (update workfloe.md)

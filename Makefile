@@ -1,33 +1,27 @@
-.PHONY: run stop build test seed logs clean
+.PHONY: run stop build test seed migrate clean
 
 run:
 	docker-compose up -d
 	@echo "✅ PostgreSQL running on port 5432"
 
+stop:
+	docker-compose down
 
 build:
 	docker-compose up -d --build
 
-logs:
-	docker-compose logs -f
-
-logs-db:
-	docker-compose logs -f postgres
-
-logs-app:
-	tail -f logs/app.log
-
 test:
 	pytest tests/ -v
 
-install:
-	pip install -r requirements.txt
+seed:
+	python scripts/seed.py
 
 migrate:
 	alembic upgrade head
 
-seed:
-	python scripts/seed.py
+clean:
+	docker-compose down -v
+	rm -rf __pycache__ */__pycache__
 
 clean:
 	docker-compose down -v

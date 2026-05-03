@@ -15,7 +15,6 @@ router = APIRouter()
 @router.get("/results/{experiment_name}")
 def get_results(
     experiment_name: str,
-    log_to_mlflow: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     experiment = db.query(Experiment).filter(
@@ -78,19 +77,9 @@ def get_results(
                     stat["assignments"]
                 )
 
-    # Optionally log to MLflow
-    if log_to_mlflow:
-        try:
-            from src.core.mlflow_tracker import log_experiment_results
-            log_experiment_results(experiment_name, variant_stats, srm)
-            logger.info("Results logged to MLflow", extra={"experiment": experiment_name})
-        except ImportError as e:
-            logger.warning(f"MLflow logging failed: {e}", extra={"experiment": experiment_name})
-
     return {
         "experiment": experiment_name,
         "status": experiment.status,
         "srm_check": srm,
-        "variants": variant_stats,
-        "mlflow_logged": log_to_mlflow
+        "variants": variant_stats
     }

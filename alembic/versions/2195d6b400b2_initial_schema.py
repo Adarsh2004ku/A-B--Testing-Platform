@@ -33,17 +33,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
-    op.create_table('feature_flags',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('key', sa.String(), nullable=False),
-    sa.Column('is_enabled', sa.Boolean(), nullable=True),
-    sa.Column('rollout_percentage', sa.Boolean(), nullable=True),
-    sa.Column('target_segments', sa.JSON(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('key')
-    )
     op.create_table('users',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('external_id', sa.String(), nullable=False),
